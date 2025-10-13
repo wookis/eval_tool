@@ -1,0 +1,10 @@
+prompt: |-
+  [평가 결과]
+  평가 결과는 아래와 같은 JSON 양식으로 제공해줘야 합니다.
+  양식은 변경하지 마세요.
+  ```json
+  {
+      평가기준: score,
+      Comment : <brief reason summary>
+  }
+  ```
