@@ -12,8 +12,10 @@ import re
 import pandas as pd
 import yaml
 from jinja2 import Template
+import ast
 from utils.logger import logger
-from evalsllm.llm_interfaces import LLMInterface, OpenAILLM, KT_MAGMA_DEV_LLM
+from utils.parser import eval_result_json
+from evalsllm.llm_interfaces import LLMInterface, OpenAILLM
 
 
 PROMPT_TEMPLATES = {}
@@ -82,6 +84,10 @@ class LLMJudge:
         self.eval_end_time: Optional[datetime] = None
         self.prompt_scores: Dict[str, Dict[str, float]] = {}
         self.dataset_filepath: Optional[str] = None
+        self.target_id: Optional[str] = None
+        self.start_index: Optional[int] = None
+        self.end_index: Optional[int] = None
+        self.actual_count: Optional[int] = None
     
     def add_criteria(self, criteria: EvaluationCriteria):
         """평가 기준 추가"""
@@ -113,6 +119,7 @@ class LLMJudge:
         output_prompt_file = "dataset/4.eval_result_data/250911-102500-prompt_df3.csv"
         # score_feedback 변수 초기화
         score_feedback = "Error: No response received"
+        judge_response = "Error: No judge model provided"
 
         if judge_model:
             # task별 동적 평가 프롬프트 생성
@@ -137,30 +144,6 @@ class LLMJudge:
             #prompt_df.to_csv(output_prompt_file, index=False, encoding='utf-8-sig')
             #print(evaluation_prompt)
             judge_response = judge_model.generate_response(evaluation_prompt)
-            
-            # response 객체에서 content 추출
-            if judge_response is not None:
-                try:
-                    if hasattr(judge_response, 'choices') and judge_response.choices and hasattr(judge_response.choices[0], 'message'):
-                        # OpenAI 응답 형식
-                        score_feedback = judge_response.choices[0].message.content or ""
-                    elif hasattr(judge_response, 'content') and judge_response.content:
-                        # Anthropic 응답 형식
-                        if isinstance(judge_response.content, list) and len(judge_response.content) > 0:
-                            score_feedback = judge_response.content[0].text
-                        else:
-                            score_feedback = str(judge_response.content)
-                    else:
-                        score_feedback = str(judge_response)
-                except Exception as e:
-                    logger.error(f"Response parsing error: {e}")
-                    score_feedback = str(judge_response)
-            else:
-                score_feedback = "Error: Judge model returned None"
-                
-  
-        
-        results = score_feedback
         
         return judge_response
 
@@ -172,7 +155,6 @@ class LLMJudge:
         # - Creative_template: 창작/서술형 콘텐츠의 품질을 평가하는 프롬프트
         # - Summary_template: 요약/요약형 평가 프롬프트
         # - Compare_template: 비교/분석 답변의 품질을 평가하는 프롬프트
-
 
         #PROMPT_CONFIG_PATH = 'config/Judge_template.yaml'
         PROMPT_TEMPLATES = load_prompt_templates(task)
@@ -472,203 +454,196 @@ class LLMJudge:
 
             item = row.to_dict()
 
+    def eval_result_check(self, df_eval: pd.DataFrame, df_eval_result_file: str):
+        """평가 여부 확인"""
+        #평가 결과 파일 존재 여부 확인
+        target_id = None  # 함수 시작 부분에서 초기화
+        start_index = 0
+        
+        if os.path.exists(df_eval_result_file):
+            if input("평가 결과 파일이 존재합니다. 기존 평가를 이어서 하시겠습니까? (y/n): ") == "n":
+                print(f"기존 파일삭제 후 새로 생성합니다.")
+                os.remove(df_eval_result_file)
+                # 새 파일 생성
+                df_eval.to_csv(df_eval_result_file, index=False, encoding='utf-8-sig')
+                print(f"새 파일 '{df_eval_result_file}'이 생성되었습니다.")
+            else:
+                df_eval_result = pd.read_csv(df_eval_result_file)
+                print("df_eval_result", len(df_eval_result))
+                print("df_eval", len(df_eval))
+                #df_eval = pd.concat([df_eval, df_eval_result], ignore_index=True)
+                #df_eval = df_eval_result.copy()
 
+                # # df_eval과 df_eval_result를 id 기준으로 병합
+                print("기존 평가 결과를 Merge 합니다...")
+                df_eval = df_eval.merge(df_eval_result[['id', 'eval_prompt', 'eval_response', 'eval_result']], 
+                                      on='id', how='left', suffixes=('', '_existing'))
+
+                for i in range(len(df_eval_result)):
+                    #print("df_eval_result.iloc[i].eval_result", i, df_eval_result.iloc[i].eval_response)
+                    if df_eval_result.iloc[i].eval_response == "" or df_eval_result.iloc[i].eval_response is None or pd.isna(df_eval_result.iloc[i].eval_response):
+                        print("여기부터다시", i, "target_id:", df_eval_result.iloc[i].id)
+                        target_id = df_eval_result.iloc[i].id
+                        df_eval = df_eval_result.copy()  # () 추가
+                        break
+                
+                if not target_id:
+                    print("모든 항목이 이미 평가되었습니다.")
+                    return
+        else:
+            df_eval = df_eval.dropna(subset=["eval_result"])
+            print(f"기존 파일이 없습니다. 새로 생성합니다.")
+            # 새 파일 생성
+            df_eval.to_csv(df_eval_result_file, index=False, encoding='utf-8-sig')
+            print(f"새 파일 '{df_eval_result_file}'이 생성되었습니다.")
+           
+
+        print("target_id", target_id, "start_index", start_index)
+        """해당 ID의 인덱스 찾기"""
+        if target_id:  # target_id가 있는 경우에만 검색
+            for idx, row in df_eval.iterrows():
+                if row.get("id") == target_id:
+                    start_index = idx
+                    break
+
+        if start_index is not None:
+            print(f"ID '{target_id}'를 찾았습니다. 인덱스: {start_index}")
+            logger.info(f"인덱스 {start_index}-{target_id}부터 다시 시작합니다.")
+        else:
+            start_index = 0
+
+        # Set the instance variable for use in other methods
+        self.start_index = start_index
+              
+        return df_eval
+    
+    def eval_result_validation(self, df_eval: pd.DataFrame, df_eval_result_file: str):
+        """평가 결과 검증"""
+        if not os.path.exists(df_eval_result_file):
+            raise ValueError("평가 결과 파일이 존재하지 않습니다.")
+        
+        df_eval_result = pd.read_csv(df_eval_result_file)
+        if df_eval_result.empty:
+            raise ValueError("평가 결과 파일이 비어있습니다.")
+        
+        return True
 
 
     def run_evaluation_on_dataset(self, 
-                                  dataset: List[Dict[str, str]], 
-                                  judge_model: Optional[LLMInterface] = None):
+                                  df_eval: List[Dict[str, str]], 
+                                  judge_model: Optional[LLMInterface] = None,
+                                  df_eval_result_file: Optional[str] = None):
         """데이터셋 전체에 대해 평가를 실행하고 응답을 캐싱합니다."""
         self.eval_start_time = datetime.now()
 
-        if not self.dataset_filepath:
-            raise ValueError("데이터셋 파일 경로가 설정되지 않았습니다. load_dataset을 먼저 호출해주세요.")
+        # Use the start_index from the instance variable if available, otherwise default to 0
+        start_index = getattr(self, 'start_index', 0) #3701
+        df_eval_cnt = 3 #len(df_eval)-start_index
         
-        try:
-            df = pd.read_csv(self.dataset_filepath, keep_default_na=False)
-        except FileNotFoundError:
-            df = pd.DataFrame(dataset)
-
+        end_index = min(start_index + df_eval_cnt, len(df_eval))
+        actual_count = end_index - start_index
         
+        logger.info(f"처리 범위: {start_index} ~ {end_index-1} (총 {actual_count}개)")
+        
+        if actual_count <= 0:
+            print("처리할 데이터가 없습니다.")
+            return
+            
+        for index, row in tqdm(df_eval.iloc[start_index:end_index].iterrows(), total=actual_count, desc="eval judge 실행"):
 
-        for index, row in tqdm(df.iterrows(), total=len(df), desc="평가 실행"):
-            no = row.get("no")
-            domain = row.get("domain")
-            task = row.get("task")
-            level = row.get("level")
-            model_name = row.get("model")
-            token_usage = row.get("token_usage")
-            prompt = row.get("prompt")
-            if not prompt:
+            # 이미 평가된 항목은 건너뛰기
+            if (not pd.isna(row.get('eval_response')) and 
+                row.get('eval_response') != "" and 
+                row.get('eval_response') is not None):
+                print(f"인덱스 {index}: 이미 평가된 항목 건너뛰기 (ID: {row.get('id')})")
                 continue
-            
-            item = row.to_dict()
-            reference_data = item.get("reference_data")
-            response = item.get("response")
-            
-            # for model_name, model in self.models.items():
-            #     #response_col = f"{model_name}_response"
-            #     response_col = f"response"
-            #     if response_col not in df.columns:
-            #         df[response_col] = ""                    
-                
-            #     response = item.get(response_col)
-            #     logger.debug(f"no : {no}")
-            #     logger.debug(f"domain : {domain}")
-            #     logger.debug(f"task : {task}")
-            #     logger.debug(f"prompt : {prompt}")
-            #     logger.debug(f"response : {response}")
 
-            #     if not response:
-            #         logger.info(f"응답 생성 중: {model_name} for '{prompt[:20]}...'")
-            #         response = model.generate_response(prompt)
- 
-            #         df.loc[index, response_col] = response
-            #         item[response_col] = response
-            #         dataset_changed = True
+            task_list = row.get("label_task")
+            if isinstance(task_list, str):
+                task_list = ast.literal_eval(task_list)
 
+            if task_list is None or task_list == "":
+                print("task_list is None or task_list == ", task_list)
+                continue
+            else:
+                task = task_list[0]
             
-            #print(task)
-            # task 값이 "," 기준으로 몇개인지 확인
-            task_list = task.split(",")
-            for task in task_list:
-                print(task)
-                 
+            id = row.get("id")
+            domain = row.get("domain")
+            level = row.get("level")
+            model_name = row.get("model_name")
+            sp_max_tokens = row.get("sp_max_tokens")
+            request = row.get("req")
+            response = row.get("res")
+            reference_data = row.get("ref")
+            evaluation_criteria = ""
+
+            #eval_prompt 생성          
+            try:
+                eval_prompt = self._create_multi_criteria_prompt(task,
+                        request, response, reference_data, evaluation_criteria)
+                #logger.info(f"eval_prompt 생성... : {index}{eval_prompt[:50]}")
+            except Exception as e:
+                logger.error(f"error eval_prompt 생성 = {e} {task}")
+                continue
+
+            #eval_response 생성
+            try:
                 eval_response = self.evaluate_response(
-                    no = str(no) if no is not None else "",
+                    no = str(id) if id is not None else "",
                     domain = str(domain) if domain is not None else "",
                     task = str(task) if task is not None else "",
                     level = str(level) if level is not None else "",
                     model_name=model_name,
-                    token_usage=token_usage,
-                    prompt=prompt,
+                    token_usage=sp_max_tokens,
+                    prompt=request,
                     response=response,
                     reference_data=reference_data,
+                    evaluation_prompt=eval_prompt,
                     judge_model=judge_model
                 )
-                response_col = f"{model_name}_result"
-                #eval_response = self.results
-                #logger.debug(f"평가 결과: {self.results}")
-                logger.info(f"평가 저장 중: {model_name} for '{prompt[:20]}...'")
+                #logger.info(f"eval_response 생성... : {index}{eval_response}")
+                #logger.info(f"eval_response 생성... : {index}{request[:20]}")
+            except Exception as e:
+                logger.error(f"error eval_response 생성 = {e} {task}")
+                continue
 
+            df_eval.loc[index, "eval_prompt"] = eval_prompt
+            df_eval.loc[index, "eval_response"] = str(eval_response)
+         
+            eval_result = eval_result_json(eval_response)
+            df_eval.loc[index, "eval_result"] = eval_result
 
-                eval_response_json = eval_response
-                #json.dumps([vars(r) for r in eval_response], ensure_ascii=False)
-
-                output_file = 'dataset/4.eval_result_data/702-multi_judge.csv'
-
-                df.loc[index, response_col] = eval_response_json
-                item[response_col] = eval_response_json
-                df.to_csv(output_file, index=False, encoding='utf-8-sig')
-                logger.info(f"평가 결과: {eval_response_json}")
-
-        logger.info(f"\n새로운 평가를 '{output_file}'에 저장합니다.")
-
-    def run_evaluation_on_dataset_chunked(self, 
-                                        dataset: List[Dict[str, str]], 
-                                        judge_model: Optional[LLMInterface] = None,
-                                        chunk_size: int = 20):
-        """메모리 최적화된 청크 단위 평가 실행"""
-        import gc
-        
-        self.eval_start_time = datetime.now()
-        
-        if not self.dataset_filepath:
-            raise ValueError("데이터셋 파일 경로가 설정되지 않았습니다. load_dataset을 먼저 호출해주세요.")
-        
-        try:
-            df = pd.read_csv(self.dataset_filepath, keep_default_na=False)
-        except FileNotFoundError:
-            df = pd.DataFrame(dataset)
-
-        output_file = 'dataset/4.eval_result_data/702-multi_judge.csv'
-        
-        # 결과 파일 초기화
-        if os.path.exists(output_file):
-            os.remove(output_file)
-        
-        total_rows = len(df)
-        processed = 0
-        
-        # 청크 단위로 처리
-        for start_idx in range(0, total_rows, chunk_size):
-            end_idx = min(start_idx + chunk_size, total_rows)
-            chunk_df = df.iloc[start_idx:end_idx]
+            # df_eval_result = pd.DataFrame({
+            #     'id': id, 
+            #     'source_id': row.get("source_id"),
+            #     'label_task': task, 
+            #     'label_level': row.get("label_level"), 
+            #     'label_domain': row.get("label_domain"),
+            #     'messages': row.get("messages"),
+            #     'content': row.get("content"),
+            #     'response': response,
+            #     'answerer_llm_alias': row.get("answerer_llm_alias"),
+            #     'status_code': row.get("status_code"),
+            #     'ref': row.get("ref"),
+            #     'req': row.get("req"),
+            #     'res': row.get("res"),
+            #     'eval_prompt': eval_prompt,
+            #     'eval_response': str(eval_response),
+            #     'eval_result': eval_result
+            # })
+            #logger.info(f"평가 결과: {eval_result}")
             
-            logger.info(f"청크 처리 중: {start_idx+1}-{end_idx}/{total_rows}")
-            
-            for index, row in chunk_df.iterrows():
-                no = row.get("no")
-                domain = row.get("domain")
-                task = row.get("task")
-                level = row.get("level")
-                model_name = row.get("model")
-                token_usage = row.get("token_usage")
-                prompt = row.get("prompt")
-                
-                if not prompt:
-                    continue
-                
-                item = row.to_dict()
-                reference_data = item.get("reference_data")
-                response = item.get("response")
-                
-                # task 리스트 처리
-                task_list = str(task).split(",")
-                for task_item in task_list:
-                    task_item = task_item.strip()
-                    if not task_item:
-                        continue
-                    
-                    eval_response = self.evaluate_response(
-                        no=str(no) if no is not None else "",
-                        domain=str(domain) if domain is not None else "",
-                        task=task_item,
-                        level=str(level) if level is not None else "",
-                        model_name=model_name,
-                        token_usage=token_usage,
-                        prompt=prompt,
-                        response=response,
-                        reference_data=reference_data,
-                        judge_model=judge_model
-                    )
-                    
-                    # 결과를 즉시 CSV에 저장
-                    result_data = {
-                        'no': no,
-                        'domain': domain,
-                        'task': task_item,
-                        'level': level,
-                        'model': model_name,
-                        'token_usage': token_usage,
-                        'prompt': prompt,
-                        'response': response,
-                        'reference_data': reference_data,
-                        f"{model_name}_result": eval_response
-                    }
-                    
-                    result_df = pd.DataFrame([result_data])
-                    
-                    if not os.path.exists(output_file):
-                        result_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-                    else:
-                        result_df.to_csv(output_file, index=False, encoding='utf-8-sig', mode='a', header=False)
-                    
-                    processed += 1
-                    
-                    # 메모리 정리
-                    del eval_response, result_data, result_df
-                    
-                    # 10개마다 가비지 컬렉션
-                    if processed % 10 == 0:
-                        gc.collect()
-            
-            # 청크 처리 후 메모리 정리
-            del chunk_df
-            gc.collect()
-            
-            logger.info(f"청크 완료. 총 처리: {processed}개")
+            if index!=0 and (index%5 == 0 or index == end_index-1):
+                if df_eval_result_file:
+                    logger.info(f"평가 저장 중: {index+1} - {id} for '{df_eval_result_file}...'")
+                    df_eval.to_csv(df_eval_result_file, index=False, encoding='utf-8-sig')
+                #del df_eval_result
         
+        if df_eval_result_file:
+            logger.info(f"평가 완료: {df_eval_result_file}, 총 {index+1}개의 평가 항목 처리")
         self.eval_end_time = datetime.now()
-        logger.info(f"평가 완료. 총 처리 시간: {self.eval_end_time - self.eval_start_time}")
-     
+        logger.info(f"총 처리 시간: {self.eval_end_time - self.eval_start_time}")
+        logger.debug(f"============== eval End ==============")
+        
+        return df_eval

@@ -16,11 +16,12 @@ dependencies = [
     "pyyaml>=6.0.2",
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
+    "streamlit>=1.29.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["llm_judge*", "eval*", "evalsllm*", "prompt*", "response*", "utils*"]
+include = ["llm_judge*", "eval*", "evalsllm*", "prompt*", "response*", "utils*", "matrix*", "metrics*"]
 
 [tool.uv.sources]
 mmo-lr-utils = { path = "wheelhouse/mmo_lr_utils-1.0.3-py3-none-any.whl" }
