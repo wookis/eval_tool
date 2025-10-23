@@ -147,7 +147,7 @@ def dataset_clean(df: pd.DataFrame):
 
     #label_task 결측값 확인 및 제거
     #print("label_task 없는 데이터 제거 전", df.shape)
-    print(df["answerer_llm_alias"].value_counts())
+    #print(df["answerer_llm_alias"].value_counts())
     print("label_task 없는 데이터 수", df[df['label_task'].isna()].shape)
     df = df[df['label_task'].notna()]
     #print("label_task 없는 데이터 제거 후", df.shape)
@@ -155,7 +155,7 @@ def dataset_clean(df: pd.DataFrame):
 
     #answerer_llm_alias 결측값 확인 및 제거
     #print("answerer_llm_alias 없는 데이터 제거 전", df.shape)
-    print(df["answerer_llm_alias"].value_counts())
+    #print(df["answerer_llm_alias"].value_counts())
     print("answerer_llm_alias 없는 데이터 수", df[df['answerer_llm_alias'].isna()].shape)
     df = df[df['answerer_llm_alias'].notna()]
     #print("answerer_llm_alias 없는 데이터 제거 후", df.shape)
@@ -163,7 +163,7 @@ def dataset_clean(df: pd.DataFrame):
 
     #eval_result 결측값 확인 및 제거
     #print("eval_result 없는 데이터 제거 전", df.shape)
-    print(df["answerer_llm_alias"].value_counts())
+    #print(df["answerer_llm_alias"].value_counts())
     print("eval_result 없는 데이터 수", df[df['eval_result'].isna()].shape)
     df = df[df['eval_result'].notna()]
     #print("eval_result 없는 데이터 제거 후", df.shape)
@@ -174,9 +174,9 @@ def dataset_clean(df: pd.DataFrame):
     print("LLM 정보 없는 데이터 수", df[df['answerer_llm_alias'].isna()].shape)
     df = df[df['answerer_llm_alias'].notna()]
     #print("LLM 정보 없는 데이터 제거 후", df_filtered.shape)
-    print("answerer_llm_alias unique", df['answerer_llm_alias'].unique())
 
     print("결측치 데이터 제거 후", df.shape)
+    print("answerer_llm_alias unique", df['answerer_llm_alias'].unique())
 
    
     #print(df.isnull().sum())

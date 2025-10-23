@@ -917,26 +917,25 @@ class ChartView:
 
 
     @staticmethod
-    def TLDCMappingHeatmap(pdf_filtered: pd.DataFrame):
-  
-        print("pdf",pdf_filtered.columns)
+    def TLDCMappingHeatmap(df_filtered: pd.DataFrame):
 
+        print("====================================== TLD Mapping Heatmap =======================================")
+  
         dict_llm_name2df_records = {}
 
-        for answerer_llm_alias in pdf_filtered['answerer_llm_alias'].unique().tolist():
-            dict_llm_name2df_records[answerer_llm_alias] = pdf_filtered[pdf_filtered['answerer_llm_alias'] == answerer_llm_alias]
+        for answerer_llm_alias in df_filtered['answerer_llm_alias'].unique().tolist():
+            dict_llm_name2df_records[answerer_llm_alias] = df_filtered[df_filtered['answerer_llm_alias'] == answerer_llm_alias]
             dict_llm_name2df_records[answerer_llm_alias].reset_index(drop=True, inplace=True)
 
         list_task_label = [f"T{i}" for i in range(1, 13)]
         list_domain_label = [f"D{i}" for i in range(1, 11)]
         list_level_label = [f"L{i}" for i in range(1, 4)]
         list_llm_name = list(dict_llm_name2df_records.keys())
-  
+
         dict_llm_name2df = {}    
 
-        print("df_1111 : ")
-
         for llm_name, df in dict_llm_name2df_records.items():
+            # print(f"{df.head(20)=}")
             list_labels = []
             for t in list_task_label:
                 for d in list_domain_label:
@@ -950,18 +949,31 @@ class ChartView:
             df_tld['count'] = 0.0
             df_tld['quality'] = 0.0
             df_tld['cost'] = 0.0
-            print("22222 : ", llm_name)
+
+            #df_tld.set_index(['T', 'D', 'L'], inplace=True)
+
+            # print("22222 : ", llm_name)
             
-            print(len(df))
-            
+            # print(len(df))
+
             for index, row in tqdm(df.iterrows()):
+                
                 T = row['label_task']
                 D = row['label_domain']
                 L = row['label_level']
                 cost = row['cost']
                 quality = row['quality']
                 
-                normalization_factor = 1 / (len(T) * len(D) * len(L))
+                normalization_factor = 1 / (len(T) * len(D) * len(L))                
+                # for t, d, l in itertools.product(T, D, L):
+                #     key = (t, d, l)
+                #     if key in df_tld.index:
+                #         df_tld.loc[key, 'count'] += normalization_factor
+                #         df_tld.loc[key, 'cost'] += cost * normalization_factor
+                #         df_tld.loc[key, 'quality'] += quality * normalization_factor
+                    #print(f"{key}")
+                    #print(f'{df_tld.index=}')
+
                 for t_to_count, d_to_count, l_to_count in itertools.product(T, D, L):
                     mask = (
                         (df_tld['T'] == t_to_count) &
@@ -971,13 +983,16 @@ class ChartView:
                     df_tld.loc[mask, 'count'] += normalization_factor
                     df_tld.loc[mask, 'cost'] += cost * normalization_factor
                     df_tld.loc[mask, 'quality'] += quality * normalization_factor
-            print("33333 : ", llm_name)
             
             dict_llm_name2df[llm_name] = df_tld
             print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
 
-           
+            # print("33333 : ", llm_name)
+            # print(f"{df_tld.head(20)=}")
 
+            #print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
+
+        
         #ßdict_llm_name2df['gpt-4.1'].head(2)
         # dict_llm_name2df는 딕셔너리이므로 각 모델별 DataFrame을 개별적으로 저장
         print(f"dict_llm_name2df contains {len(dict_llm_name2df)} models")
@@ -987,8 +1002,6 @@ class ChartView:
         #     filename = f'dict_llm_name2df_{model_name.replace("-", "_")}.csv'
         #     df_model.to_csv(filename, index=False)
         #     print(f"Saved {filename}")
-
-
 
         # 모든 DataFrame을 하나로 합쳐서 저장
         all_data = []
@@ -1000,7 +1013,7 @@ class ChartView:
         combined_df = pd.concat(all_data, ignore_index=True)
         combined_df.to_csv('all_models_data.csv', index=False)
 
-        ## 위 결과의 key를 llm_alias에서 llm_id로 변경
+
         dict_llm_id2llm_name = {
         index: llm_name for index, llm_name in enumerate(dict_llm_name2df.keys())
         }
@@ -1009,6 +1022,7 @@ class ChartView:
         dict_llm_id2df[0].head(2)
 
         ## count가 0이 아닌 것만 모음
+
         def get_row_from_df_tld(df_tld, T, D, L):
             return df_tld[(df_tld['T'] == T) & (df_tld['D'] == D) & (df_tld['L'] == L)]
 
@@ -1037,13 +1051,9 @@ class ChartView:
                 print(T,D,L)
                 print(list_dict_list_llm_id_and_quality_and_cost_efficient)
                 break
-     
             df_all_candidate_tld.loc[len(df_all_candidate_tld)] = [T, D, L, list_dict_list_llm_id_and_quality_and_cost_efficient, count]
         df_all_candidate_tld.head(2)
-    
-        #df_all_candidate_tld.to_dict(orient='records')
-        #df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len).value_counts().sort_index()
-        
+
         ## count가 0개가 아닌것만 처음에 모였고,
         ## TLD 조합 내 최적 LLM이 1개인 것들을 별도로 모음
         df_already_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) == 1].reset_index(drop=True)
@@ -1056,7 +1066,7 @@ class ChartView:
         for _, df_already_efficient_tld_row in df_already_efficient_tld.iterrows():
             total_quality_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['quality']
             total_cost_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['cost']
-      
+        
         ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 추림
         ## 이것들을 가지고 최적 LLM을 찾아야 함
         df_to_find_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) >= 2].reset_index(drop=True)
@@ -1094,7 +1104,6 @@ class ChartView:
 
         ChartView.plot_tld_table(df_efficient_tld_num_llm_as_tld_table, pdf_merged_sample_llm_name_as_tld_table, 'highest_quality')
 
-        return efficient_tld
 
     
 

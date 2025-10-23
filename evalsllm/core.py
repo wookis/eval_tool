@@ -536,7 +536,6 @@ class LLMJudge:
         """데이터셋 전체에 대해 평가를 실행하고 응답을 캐싱합니다."""
         self.eval_start_time = datetime.now()
 
-        # Use the start_index from the instance variable if available, otherwise default to 0
         start_index = getattr(self, 'start_index', 0) #3701
         df_eval_cnt = 3 #len(df_eval)-start_index
         

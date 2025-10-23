@@ -18,10 +18,6 @@ import numpy as np
 from pathlib import Path
 
 
-
-
-#from evalsllm.core import PROMPT_TEMPLATES 
-
 def main():
     logger.info("============== Starting eval-tool ==============")
 
