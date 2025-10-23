@@ -10,6 +10,6 @@ logs
 .env
 temp# Virtual environments
 .venv
-config
-response
+config/llm_model_info.json
+response/
 temp

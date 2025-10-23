@@ -29,10 +29,44 @@ def load_dataset(file_path: str) -> pd.DataFrame:
         file_ext = Path(file_path).suffix.lower()
         
         if file_ext == '.csv':
-            dataset = pd.read_csv(file_path)
+            dataset = pd.read_csv(file_path, converters={
+            'label_task': literal_eval,
+            'label_level': literal_eval,
+            'label_domain': literal_eval
+        }).rename(columns={
+            # 'label_task': 'task', 
+            # 'label_level': 'level',
+            # 'label_domain': 'domain',
+            'model_name': 'answerer_llm_alias'
+            })
+
+            #dataset['label_task'] = dataset['label_task'].apply(lambda x: literal_eval(x))
+
+            # dataset = dataset.dropna(subset=['label_task'])
+            # dataset['label_task'] = dataset['label_task'].apply(lambda x: literal_eval(x))
+            # dataset = dataset.dropna(subset=['label_level'])
+            # dataset['label_level'] = dataset['label_level'].apply(lambda x: literal_eval(x))
+            # dataset = dataset.dropna(subset=['label_domain'])
+            # dataset['label_domain'] = dataset['label_domain'].apply(lambda x: literal_eval(x))
+            # print(type(dataset['label_task'].iloc[0]))
+
             #print(dataset.columns)
-            dataset = dataset.rename(columns={"model_name":"answerer_llm_alias", "task":"label_task", "level":"label_level", "domain":"label_domain"})
+            #dataset = dataset.rename(columns={"model_name":"answerer_llm_alias", "task":"label_task", "level":"label_level", "domain":"label_domain"})
             #dataset = pd.read_csv(file_path, converters={"messages":literal_eval})
+        elif file_ext == '.pkl':            
+            dataset = pd.read_pickle(file_path)
+            dataset = dataset.dropna(subset=['label_task'])
+
+            if type(dataset['label_task']) == str:
+                dataset['label_task'] = dataset['label_task'].apply(lambda x: literal_eval(x))
+                dataset = dataset.dropna(subset=['label_level'])
+                dataset['label_level'] = dataset['label_level'].apply(lambda x: literal_eval(x))
+                dataset = dataset.dropna(subset=['label_domain'])
+                dataset['label_domain'] = dataset['label_domain'].apply(lambda x: literal_eval(x))
+
+            dataset = dataset.rename(columns={"model_name":"answerer_llm_alias", "task":"label_task", "level":"label_level", "domain":"label_domain"})
+            #
+
         elif file_ext == '.parquet':            
             dataset = pd.read_parquet(file_path)
         elif file_ext == '.json':            
@@ -108,31 +142,41 @@ def dataset_clean(df: pd.DataFrame):
     #df 결측값 확인
     #print(df.isnull().sum())
 
+    # 결측치 데이터 제거
+    print("결측치 데이터 제거 전", df.shape)
+
     #label_task 결측값 확인 및 제거
-    print("label_task 없는 데이터 제거 전", df.shape)
+    #print("label_task 없는 데이터 제거 전", df.shape)
     print(df["answerer_llm_alias"].value_counts())
     print("label_task 없는 데이터 수", df[df['label_task'].isna()].shape)
     df = df[df['label_task'].notna()]
-    print("label_task 없는 데이터 제거 후", df.shape)
+    #print("label_task 없는 데이터 제거 후", df.shape)
     #print(df["answerer_llm_alias"].value_counts())
 
-
     #answerer_llm_alias 결측값 확인 및 제거
-    print("answerer_llm_alias 없는 데이터 제거 전", df.shape)
+    #print("answerer_llm_alias 없는 데이터 제거 전", df.shape)
     print(df["answerer_llm_alias"].value_counts())
     print("answerer_llm_alias 없는 데이터 수", df[df['answerer_llm_alias'].isna()].shape)
     df = df[df['answerer_llm_alias'].notna()]
-    print("answerer_llm_alias 없는 데이터 제거 후", df.shape)
+    #print("answerer_llm_alias 없는 데이터 제거 후", df.shape)
     #print(df["answerer_llm_alias"].value_counts())
 
-
     #eval_result 결측값 확인 및 제거
-    print("eval_result 없는 데이터 제거 전", df.shape)
+    #print("eval_result 없는 데이터 제거 전", df.shape)
     print(df["answerer_llm_alias"].value_counts())
     print("eval_result 없는 데이터 수", df[df['eval_result'].isna()].shape)
     df = df[df['eval_result'].notna()]
-    print("eval_result 없는 데이터 제거 후", df.shape)
+    #print("eval_result 없는 데이터 제거 후", df.shape)
     #print(df["answerer_llm_alias"].value_counts())
+
+    #df_filtered answerer_llm_alias 결측값 제거
+    #print("LLM 정보 없는 데이터 제거 전", df_filtered.shape)
+    print("LLM 정보 없는 데이터 수", df[df['answerer_llm_alias'].isna()].shape)
+    df = df[df['answerer_llm_alias'].notna()]
+    #print("LLM 정보 없는 데이터 제거 후", df_filtered.shape)
+    print("answerer_llm_alias unique", df['answerer_llm_alias'].unique())
+
+    print("결측치 데이터 제거 후", df.shape)
 
    
     #print(df.isnull().sum())
@@ -195,6 +239,14 @@ def dataset_clean(df: pd.DataFrame):
         df_filtered.reset_index(drop=True, inplace=True)
 
         print("lr_answer_bronze_id 없는 데이터 제거 후", df_filtered.shape)
+    else:
+        df['answerer_llm_id'] = df['answerer_llm_alias'].map(lambda model_name: dict_llm_alias2llm_id[model_name])
+        import uuid
+        df["lr_answer_bronze_id"] = df.groupby("messages")["content"].transform(
+            lambda x: str(uuid.uuid4())
+        )
+      
+
     #수정버전 평가결과 파싱
     def safe_parse_quality(x):
         try:
@@ -219,13 +271,12 @@ def dataset_clean(df: pd.DataFrame):
     print("사용 가능한 모델들:", [key for key in dict_llm_name2info])
     print("실제 데이터의 모델들:", df_filtered['answerer_llm_alias'].unique())
 
-    #df_filtered answerer_llm_alias 결측값 제거
-    print("LLM 정보 없는 데이터 제거 전", df_filtered.shape)
-    print("LLM 정보 없는 데이터 수", df_filtered[df_filtered['answerer_llm_alias'].isna()].shape)
-    df_filtered = df_filtered[df_filtered['answerer_llm_alias'].notna()]
-    print("LLM 정보 없는 데이터 제거 후", df_filtered.shape)
-    print("answerer_llm_alias unique", df_filtered['answerer_llm_alias'].unique())
-
+    
+    
+    # Quality 확인
+    # for g in df_filtered["answerer_llm_alias"].unique():
+    #     print(g)
+    #     print(df_filtered[lambda row: row['answerer_llm_alias'] == g].describe())
 
     ##### Cost 계산
     list_cost = []
@@ -233,8 +284,9 @@ def dataset_clean(df: pd.DataFrame):
     for index, row in df_filtered.iterrows():
         try:
             answerer_llm_alias = row['answerer_llm_alias']
+            #print("answerer_llm_alias", answerer_llm_alias)
             
-            # 모델명 매핑 (더 많은 케이스 추가)
+            #모델명 매핑 (더 많은 케이스 추가)
             if answerer_llm_alias == 'gpt-4.1':
                 answerer_llm_alias = 'gpt_4_1'
             elif answerer_llm_alias == 'midm-base-2.3.2':
@@ -251,6 +303,8 @@ def dataset_clean(df: pd.DataFrame):
                 answerer_llm_alias = 'gpt_oss_120b'  # 기본값으로 매핑
             elif answerer_llm_alias == 'gpt-4o-mini':
                 answerer_llm_alias = 'gpt_4_1_mini'  # 기본값으로 매핑
+            elif answerer_llm_alias == 'llama-3.1-74b-fp16':
+                answerer_llm_alias = 'llama_74b_fp16'  # 기본값으로 매핑
    
             # 모델 정보가 있는지 확인
             if answerer_llm_alias not in dict_llm_name2info:
@@ -259,8 +313,7 @@ def dataset_clean(df: pd.DataFrame):
             else:
                 dollar_per_input_token = dict_llm_name2info[answerer_llm_alias]['price']['dollar_per_input_token']
                 dollar_per_output_token = dict_llm_name2info[answerer_llm_alias]['price']['dollar_per_output_token']
-                dollar_per_cached_input_token = dict_llm_alias2price[answerer_llm_alias]['dollar_per_cached_input_token']
-
+            
                 # response가 JSON 문자열인지 확인
                 if isinstance(row['response'], str):
                     response_data = json.loads(row['response'])
@@ -283,11 +336,11 @@ def dataset_clean(df: pd.DataFrame):
 
     df_filtered['cost'] = list_cost
 
-    for column in ['metadata', 'messages', 'answer', 'task', 'domain', 'level', 'judge_total_score', 'total_price']:
-        if column in df.columns:
-            print(f"column in {column}")
-        else:
-            print(f"column not in {column}")
+    # for column in ['metadata', 'messages', 'answer', 'task', 'domain', 'level', 'judge_total_score', 'total_price']:
+    #     if column in df.columns:
+    #         print(f"column in {column}")
+    #     else:
+    #         print(f"column not in {column}")
             
 
     print("dataset_clean : ", df_filtered.shape)

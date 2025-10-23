@@ -20,6 +20,10 @@ from utils.eda import ChartView
 from utils.parser import load_dataset, dataset_clean
 from utils.parser import parse_json_block_safely
 from utils.eda import EDA
+import itertools
+from tqdm import tqdm
+from utils.eda import filter_efficient_llm, get_efficient_tld_by_step_by_step
+
 
 
 # 페이지 설정
@@ -60,6 +64,9 @@ def main():
     
     # 파일 선택
     result_file = st.selectbox('결과 파일 선택', data_loader.result_files)
+    result_file = "702-sample-evaluaution-9-target-llms-cleansed.pkl"
+    result_file = "250911-102500-answered_df_result9_fin.csv"
+    
     
     # 데이터 로드
     try:
@@ -68,27 +75,33 @@ def main():
     except Exception as e:
         st.error(f'데이터 로드 중 오류가 발생했습니다: {e}')
         st.stop()
-        sys.exit()
+        exit()
 ###########################################################################################
 
     #평가대상 데이터 분포 확인
-    #ChartView.DataEDA(df)
-    print(df.columns)
+    ChartView.DataEDA(df)
+    #print(df.columns)
     
     #평가결과 데이터 클렌징    
     df_filtered = dataset_clean(df)
     
     #모델별 평가 결과 분포 차트 그리기
-    #ChartView.ModelEvalDist(df_filtered)
+    ChartView.ModelEvalDist(df_filtered)
 
     #모델별 스코어 분포 차트 그리기
-    #ChartView.ModelScoreDist(df_filtered)
+    ChartView.ModelScoreDist(df_filtered)
+
+    #모델별 Cost 분포 차트 그리기
+    ChartView.ModelCostDist(df_filtered)
+
+    #tldc 맵핑 데이터 만들기
+    efficient_tld = EDA.TLDMapData(df_filtered)
+ 
 
     #tldc 맵핑 히트맵 그리기
-    ChartView.TLDCMappingHeatmap(df_filtered)
+    #ChartView.TLDCMappingHeatmap(df_filtered)
    
-    #ChartView.ModelEvalSummary(df_filtered)
-
+ 
     #모델별 히트맵 그리기
     #ChartView.ModelHeatmap(df_filtered)
 
