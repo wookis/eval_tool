@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import json
-from unittest import result
+
 import numpy as np
 from datetime import datetime, timedelta
 import csv
@@ -45,8 +45,6 @@ def load_prompt_templates(task : str):
 
     
 
-#PROMPT_TEMPLATES = load_prompt_templates()
-
 @dataclass
 class EvaluationCriteria:
     """평가 기준을 정의하는 클래스"""
@@ -65,13 +63,6 @@ class EvaluationResult:
     prompt: str
     response: str
     timestamp: str = datetime.now().isoformat()
-
-class LLM_MODEL:
-    def __init__(self):
-        self.models: Dict[str, LLMInterface] = {}
-        
-    def add_model(self, model: LLMInterface):
-        self.models[model.get_model_name()] = model
 
 class LLMJudge:
     """LLM의 성능을 평가하는 메인 클래스"""
@@ -432,28 +423,6 @@ class LLMJudge:
             print(f"\n새로운 응답을 '{self.dataset_filepath}'에 저장합니다.")
             df.to_csv(self.dataset_filepath, index=False, encoding='utf-8-sig')
 
-                    
-    def evaluate_responses_on_dataset(self, dataset: List[Dict[str, str]], judge_model: Optional[LLMInterface] = None):
-        """데이터셋 전체에 대해 평가를 실행하고 응답을 캐싱합니다."""
-        self.eval_start_time = datetime.now()
-
-        if not self.dataset_filepath:
-            raise ValueError("데이터셋 파일 경로가 설정되지 않았습니다. load_dataset을 먼저 호출해주세요.")
-
-        try:
-            df = pd.read_csv(self.dataset_filepath, keep_default_na=False)
-        except FileNotFoundError:
-            df = pd.DataFrame(dataset)
-
-        dataset_changed = False
-
-        for index, row in tqdm(df.iterrows(), total=len(df), desc="평가 실행"):
-            prompt = row.get("prompt")
-            if not prompt:
-                continue
-
-            item = row.to_dict()
-
     def eval_result_check(self, df_eval: pd.DataFrame, df_eval_result_file: str):
         """평가 여부 확인"""
         #평가 결과 파일 존재 여부 확인
@@ -471,8 +440,6 @@ class LLMJudge:
                 df_eval_result = pd.read_csv(df_eval_result_file)
                 print("df_eval_result", len(df_eval_result))
                 print("df_eval", len(df_eval))
-                #df_eval = pd.concat([df_eval, df_eval_result], ignore_index=True)
-                #df_eval = df_eval_result.copy()
 
                 # # df_eval과 df_eval_result를 id 기준으로 병합
                 print("기존 평가 결과를 Merge 합니다...")
@@ -517,17 +484,6 @@ class LLMJudge:
               
         return df_eval
     
-    def eval_result_validation(self, df_eval: pd.DataFrame, df_eval_result_file: str):
-        """평가 결과 검증"""
-        if not os.path.exists(df_eval_result_file):
-            raise ValueError("평가 결과 파일이 존재하지 않습니다.")
-        
-        df_eval_result = pd.read_csv(df_eval_result_file)
-        if df_eval_result.empty:
-            raise ValueError("평가 결과 파일이 비어있습니다.")
-        
-        return True
-
 
     def run_evaluation_on_dataset(self, 
                                   df_eval: List[Dict[str, str]], 
@@ -613,26 +569,6 @@ class LLMJudge:
             eval_result = eval_result_json(eval_response)
             df_eval.loc[index, "eval_result"] = eval_result
 
-            # df_eval_result = pd.DataFrame({
-            #     'id': id, 
-            #     'source_id': row.get("source_id"),
-            #     'label_task': task, 
-            #     'label_level': row.get("label_level"), 
-            #     'label_domain': row.get("label_domain"),
-            #     'messages': row.get("messages"),
-            #     'content': row.get("content"),
-            #     'response': response,
-            #     'answerer_llm_alias': row.get("answerer_llm_alias"),
-            #     'status_code': row.get("status_code"),
-            #     'ref': row.get("ref"),
-            #     'req': row.get("req"),
-            #     'res': row.get("res"),
-            #     'eval_prompt': eval_prompt,
-            #     'eval_response': str(eval_response),
-            #     'eval_result': eval_result
-            # })
-            #logger.info(f"평가 결과: {eval_result}")
-            
             if index!=0 and (index%5 == 0 or index == end_index-1):
                 if df_eval_result_file:
                     logger.info(f"평가 저장 중: {index+1} - {id} for '{df_eval_result_file}...'")

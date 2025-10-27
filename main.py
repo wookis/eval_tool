@@ -1,22 +1,16 @@
-#from pydoc import resolve
 import sys
 import os
-#from analysis import df_eval_result
 
 from utils.logger import logger
 from dotenv import load_dotenv
-from tqdm import tqdm
 from utils.parser import load_dataset, eval_result_json
-from utils.eda import analyze_missing_values, analyze_data_distribution, dataset_validation
-from utils.eda import create_eval_file
-from evalsllm.core import LLMJudge, EvaluationCriteria
+from utils.eda import create_eval_file, dataset_validation
+from evalsllm.core import LLMJudge
 from evalsllm.llm_interfaces import OpenAILLM
-from datetime import datetime
 import pandas as pd
-import ast
 import numpy as np
-from pathlib import Path
 
+from pathlib import Path
 
 def main():
     logger.info("============== Starting eval-tool ==============")
@@ -79,7 +73,10 @@ def main():
         load_dotenv()
         judge = LLMJudge()
         gpt4_o = OpenAILLM(model_name="gpt-4o")
+        #midm_mini_inst_2_3_1 = OpenAILLM(model_name="midm-mini-inst-2.3.1")
         judge.add_model(gpt4_o)
+        # judge.add_model(midm-mini-inst-2.3.1)
+        # judge.add_model(llama-3-1-74b)
 
         judge_model = gpt4_o
         #평가기준 추가시
@@ -122,11 +119,6 @@ def main():
     else:
         sys.exit(1)
 
-   
-
-    #df_eval_result.csv 파일 로드
-    # df_eval_result = pd.read_csv(eval_result_save_path)
-    # print(df_eval_result.head(10))
 
 
 

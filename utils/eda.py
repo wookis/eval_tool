@@ -16,8 +16,6 @@ import re
 from matplotlib.colors import LinearSegmentedColormap
 
 
-
-
 # 결측값 분석
 def analyze_missing_values(df: pd.DataFrame):
     logger.info("\n=== 결측값 분석 ===")
@@ -231,191 +229,177 @@ def pivot_df_as_tld2tld_as_table(df_as_tld, values=None, aggfunc=None):
     return df_as_table_pivot[sorted_columns]
 
 def get_TLDMapData(df_filtered: pd.DataFrame):
-    dict_llm_name2df_records = {}
+        print("====================================== TLD Map Data =======================================")
+        dict_llm_name2df_records = {}
 
-    for answerer_llm_alias in df_filtered['answerer_llm_alias'].unique().tolist():
-        dict_llm_name2df_records[answerer_llm_alias] = df_filtered[df_filtered['answerer_llm_alias'] == answerer_llm_alias]
-        dict_llm_name2df_records[answerer_llm_alias].reset_index(drop=True, inplace=True)
+        for answerer_llm_alias in df_filtered['answerer_llm_alias'].unique().tolist():
+            dict_llm_name2df_records[answerer_llm_alias] = df_filtered[df_filtered['answerer_llm_alias'] == answerer_llm_alias]
+            dict_llm_name2df_records[answerer_llm_alias].reset_index(drop=True, inplace=True)
 
-    list_task_label = [f"T{i}" for i in range(1, 13)]
-    list_domain_label = [f"D{i}" for i in range(1, 11)]
-    list_level_label = [f"L{i}" for i in range(1, 4)]
-    list_llm_name = list(dict_llm_name2df_records.keys())
+        list_task_label = [f"T{i}" for i in range(1, 13)]
+        list_domain_label = [f"D{i}" for i in range(1, 11)]
+        list_level_label = [f"L{i}" for i in range(1, 4)]
+        list_llm_name = list(dict_llm_name2df_records.keys())
 
-    dict_llm_name2df = {}    
+        dict_llm_name2df = {}    
 
-    for llm_name, df in dict_llm_name2df_records.items():
-        # print(f"{df.head(20)=}")
-        list_labels = []
-        for t in list_task_label:
-            for d in list_domain_label:
-                for l in list_level_label:
-                    list_labels.append({
-                        "T": t,
-                        "D": d,
-                        "L": l,
-                    })
-        df_tld = pd.DataFrame(list_labels)
-        df_tld['count'] = 0.0
-        df_tld['quality'] = 0.0
-        df_tld['cost'] = 0.0
+        for llm_name, df in dict_llm_name2df_records.items():
+            # print(f"{df.head(20)=}")
+            list_labels = []
+            for t in list_task_label:
+                for d in list_domain_label:
+                    for l in list_level_label:
+                        list_labels.append({
+                            "T": t,
+                            "D": d,
+                            "L": l,
+                        })
+            df_tld = pd.DataFrame(list_labels)
+            df_tld['count'] = 0.0
+            df_tld['quality'] = 0.0
+            df_tld['cost'] = 0.0
 
-        #df_tld.set_index(['T', 'D', 'L'], inplace=True)
+            #df_tld.set_index(['T', 'D', 'L'], inplace=True)
 
-        # print("22222 : ", llm_name)
-        
-        # print(len(df))
+            for index, row in tqdm(df.iterrows()):
+                
+                T = row['label_task']
+                D = row['label_domain']
+                L = row['label_level']
+                cost = row['cost']
+                quality = row['quality']
+                
+                normalization_factor = 1 / (len(T) * len(D) * len(L))                
+                # for t, d, l in itertools.product(T, D, L):
+                #     key = (t, d, l)
+                #     if key in df_tld.index:
+                #         df_tld.loc[key, 'count'] += normalization_factor
+                #         df_tld.loc[key, 'cost'] += cost * normalization_factor
+                #         df_tld.loc[key, 'quality'] += quality * normalization_factor
+                    #print(f"{key}")
+                    #print(f'{df_tld.index=}')
 
-        for index, row in tqdm(df.iterrows()):
+                for t_to_count, d_to_count, l_to_count in itertools.product(T, D, L):
+                    mask = (
+                        (df_tld['T'] == t_to_count) &
+                        (df_tld['D'] == d_to_count) &
+                        (df_tld['L'] == l_to_count)
+                    )
+                    df_tld.loc[mask, 'count'] += normalization_factor
+                    df_tld.loc[mask, 'cost'] += cost * normalization_factor
+                    df_tld.loc[mask, 'quality'] += quality * normalization_factor
             
-            T = row['label_task']
-            D = row['label_domain']
-            L = row['label_level']
-            cost = row['cost']
-            quality = row['quality']
+            dict_llm_name2df[llm_name] = df_tld
+            print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
+        
+        #dict_llm_name2df['gpt-4.1'].head(2)
+        # dict_llm_name2df는 딕셔너리이므로 각 모델별 DataFrame을 개별적으로 저장
+        print(f"dict_llm_name2df contains {len(dict_llm_name2df)} models")
+        
+        # 각 모델별 DataFrame을 개별 CSV 파일로 저장 (선택사항)
+        # for model_name, df_model in dict_llm_name2df.items():
+        #     filename = f'dict_llm_name2df_{model_name.replace("-", "_")}.csv'
+        #     df_model.to_csv(filename, index=False)
+        #     print(f"Saved {filename}")
+
+        # 모든 DataFrame을 하나로 합쳐서 저장
+        all_data = []
+        for model_name, df_model in dict_llm_name2df.items():
+            df_with_model = df_model.copy()
+            df_with_model['model_name'] = model_name
+            all_data.append(df_with_model)
             
-            normalization_factor = 1 / (len(T) * len(D) * len(L))                
-            # for t, d, l in itertools.product(T, D, L):
-            #     key = (t, d, l)
-            #     if key in df_tld.index:
-            #         df_tld.loc[key, 'count'] += normalization_factor
-            #         df_tld.loc[key, 'cost'] += cost * normalization_factor
-            #         df_tld.loc[key, 'quality'] += quality * normalization_factor
-                #print(f"{key}")
-                #print(f'{df_tld.index=}')
+        combined_df = pd.concat(all_data, ignore_index=True)
+        combined_df.to_csv('all_models_data.csv', index=False)
 
-            for t_to_count, d_to_count, l_to_count in itertools.product(T, D, L):
-                mask = (
-                    (df_tld['T'] == t_to_count) &
-                    (df_tld['D'] == d_to_count) &
-                    (df_tld['L'] == l_to_count)
-                )
-                df_tld.loc[mask, 'count'] += normalization_factor
-                df_tld.loc[mask, 'cost'] += cost * normalization_factor
-                df_tld.loc[mask, 'quality'] += quality * normalization_factor
+
+        dict_llm_id2llm_name = {
+        index: llm_name for index, llm_name in enumerate(dict_llm_name2df.keys())
+        }
+        print(f"{dict_llm_id2llm_name[0]=}")
+        dict_llm_id2df = {index: df for index, df in enumerate(dict_llm_name2df.values())}
+        dict_llm_id2df[0].head(2)
+
+        ## count가 0이 아닌 것만 모음
+
+        def get_row_from_df_tld(df_tld, T, D, L):
+            return df_tld[(df_tld['T'] == T) & (df_tld['D'] == D) & (df_tld['L'] == L)]
+
+        df_all_candidate_tld = pd.DataFrame(columns=['T', 'D', 'L', 'list_dict_list_llm_ids_and_quality_and_cost_efficient', 'count'])
+
+        df_sample_tld = dict_llm_id2df[0]
+
+        for index, current_target_row in tqdm(df_sample_tld[df_sample_tld['count'].ne(0)].iterrows()):
+            T = current_target_row['T']
+            D = current_target_row['D']
+            L = current_target_row['L']
+            count = current_target_row['count']
+
+            list_dict_list_llm_id_and_quality_and_cost = []
+
+            for candidate_llm_id, df_tld_to_check in dict_llm_id2df.items():
+                row_to_check = get_row_from_df_tld(df_tld_to_check, T, D, L)
+                candidate_quality = row_to_check['quality'].values[0]
+                candidate_cost = row_to_check['cost'].values[0]
+                list_dict_list_llm_id_and_quality_and_cost.append({'list_llm_id': [candidate_llm_id], 'quality': candidate_quality, 'cost': candidate_cost})
+
+            list_dict_list_llm_id_and_quality_and_cost_efficient = filter_efficient_llm(list_dict_list_llm_id_and_quality_and_cost)
+            # print(T,D,L)
+            # print(list_dict_list_llm_id_and_quality_and_cost_efficient)
+            if len(list_dict_list_llm_id_and_quality_and_cost_efficient) == 0:
+                print(T,D,L)
+                print(list_dict_list_llm_id_and_quality_and_cost_efficient)
+                break
+            df_all_candidate_tld.loc[len(df_all_candidate_tld)] = [T, D, L, list_dict_list_llm_id_and_quality_and_cost_efficient, count]
+        df_all_candidate_tld.head(2)
+
+        ## count가 0개가 아닌것만 처음에 모였고,
+        ## TLD 조합 내 최적 LLM이 1개인 것들을 별도로 모음
+        df_already_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) == 1].reset_index(drop=True)
         
-        dict_llm_name2df[llm_name] = df_tld
-        print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
-
-        # print("33333 : ", llm_name)
-        # print(f"{df_tld.head(20)=}")
-
-        #print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
-
+        #print("df_already_efficient_tld.shape : ", df_already_efficient_tld.shape)
     
-    #ßdict_llm_name2df['gpt-4.1'].head(2)
-    # dict_llm_name2df는 딕셔너리이므로 각 모델별 DataFrame을 개별적으로 저장
-    print(f"dict_llm_name2df contains {len(dict_llm_name2df)} models")
-    
-    # 각 모델별 DataFrame을 개별 CSV 파일로 저장 (선택사항)
-    # for model_name, df_model in dict_llm_name2df.items():
-    #     filename = f'dict_llm_name2df_{model_name.replace("-", "_")}.csv'
-    #     df_model.to_csv(filename, index=False)
-    #     print(f"Saved {filename}")
 
-    # 모든 DataFrame을 하나로 합쳐서 저장
-    all_data = []
-    for model_name, df_model in dict_llm_name2df.items():
-        df_with_model = df_model.copy()
-        df_with_model['model_name'] = model_name
-        all_data.append(df_with_model)
+        ## TLD 조합 내 최적 LLM이 1개인 것들의 quality, cost를 누적 (어떠한 조합에서도 누적된 quality, cost는 기본이됨)
+        total_quality_of_efficient_tld = 0
+        total_cost_of_efficient_tld = 0
+        for _, df_already_efficient_tld_row in df_already_efficient_tld.iterrows():
+            total_quality_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['quality']
+            total_cost_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['cost']
         
-    combined_df = pd.concat(all_data, ignore_index=True)
-    combined_df.to_csv('all_models_data.csv', index=False)
+        ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 추림
+        ## 이것들을 가지고 최적 LLM을 찾아야 함
+        df_to_find_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) >= 2].reset_index(drop=True)
+        print("df_to_find_efficient_tld.shape : ", df_to_find_efficient_tld.shape)
+
+        df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list()
+
+        ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 입력해서
+        ## 최적을 찾음
+        efficient_tld = get_efficient_tld_by_step_by_step(df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list())
+
+        ## 2개 이상이었던 efficient_tld에 1개짜리 값 추가
+        for dict_efficient_tld in efficient_tld:
+            dict_efficient_tld['cost'] += total_cost_of_efficient_tld
+            dict_efficient_tld['quality'] += total_quality_of_efficient_tld
 
 
-    dict_llm_id2llm_name = {
-    index: llm_name for index, llm_name in enumerate(dict_llm_name2df.keys())
-    }
-    print(f"{dict_llm_id2llm_name[0]=}")
-    dict_llm_id2df = {index: df for index, df in enumerate(dict_llm_name2df.values())}
-    dict_llm_id2df[0].head(2)
+        ## 예시로 1개만 만들어 보기 위한 샘플 데이터 확보
+        pdf_efficient_tld_sample = efficient_tld[-1]
+        pdf_efficient_tld_sample['llm_name'] = [dict_llm_id2llm_name[llm_id] for llm_id in pdf_efficient_tld_sample['list_llm_id']]
+        pdf_merged_sample = pd.concat([df_to_find_efficient_tld, pd.DataFrame(pdf_efficient_tld_sample)], axis=1)
+        #print("pdf+merge", pdf_merged_sample.head(2))
 
-    ## count가 0이 아닌 것만 모음
-
-    def get_row_from_df_tld(df_tld, T, D, L):
-        return df_tld[(df_tld['T'] == T) & (df_tld['D'] == D) & (df_tld['L'] == L)]
-
-    df_all_candidate_tld = pd.DataFrame(columns=['T', 'D', 'L', 'list_dict_list_llm_ids_and_quality_and_cost_efficient', 'count'])
-
-    df_sample_tld = dict_llm_id2df[0]
-
-    for index, current_target_row in tqdm(df_sample_tld[df_sample_tld['count'].ne(0)].iterrows()):
-        T = current_target_row['T']
-        D = current_target_row['D']
-        L = current_target_row['L']
-        count = current_target_row['count']
-
-        list_dict_list_llm_id_and_quality_and_cost = []
-
-        for candidate_llm_id, df_tld_to_check in dict_llm_id2df.items():
-            row_to_check = get_row_from_df_tld(df_tld_to_check, T, D, L)
-            candidate_quality = row_to_check['quality'].values[0]
-            candidate_cost = row_to_check['cost'].values[0]
-            list_dict_list_llm_id_and_quality_and_cost.append({'list_llm_id': [candidate_llm_id], 'quality': candidate_quality, 'cost': candidate_cost})
-
-        list_dict_list_llm_id_and_quality_and_cost_efficient = filter_efficient_llm(list_dict_list_llm_id_and_quality_and_cost)
-        # print(T,D,L)
-        # print(list_dict_list_llm_id_and_quality_and_cost_efficient)
-        if len(list_dict_list_llm_id_and_quality_and_cost_efficient) == 0:
-            print(T,D,L)
-            print(list_dict_list_llm_id_and_quality_and_cost_efficient)
-            break
-        df_all_candidate_tld.loc[len(df_all_candidate_tld)] = [T, D, L, list_dict_list_llm_id_and_quality_and_cost_efficient, count]
-    df_all_candidate_tld.head(2)
-
-    ## count가 0개가 아닌것만 처음에 모였고,
-    ## TLD 조합 내 최적 LLM이 1개인 것들을 별도로 모음
-    df_already_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) == 1].reset_index(drop=True)
-    print("df_already_efficient_tld.shape : ", df_already_efficient_tld.shape)
-    print("dddddddddddddd")
-
-    ## TLD 조합 내 최적 LLM이 1개인 것들의 quality, cost를 누적 (어떠한 조합에서도 누적된 quality, cost는 기본이됨)
-    total_quality_of_efficient_tld = 0
-    total_cost_of_efficient_tld = 0
-    for _, df_already_efficient_tld_row in df_already_efficient_tld.iterrows():
-        total_quality_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['quality']
-        total_cost_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['cost']
-    
-    ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 추림
-    ## 이것들을 가지고 최적 LLM을 찾아야 함
-    df_to_find_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) >= 2].reset_index(drop=True)
-    print("df_to_find_efficient_tld.shape : ", df_to_find_efficient_tld.shape)
-
-    df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list()
-
-    ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 입력해서
-    ## 최적을 찾음
-    efficient_tld = get_efficient_tld_by_step_by_step(df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list())
-
-    ## 2개 이상이었던 efficient_tld에 1개짜리 값 추가
-    for dict_efficient_tld in efficient_tld:
-        dict_efficient_tld['cost'] += total_cost_of_efficient_tld
-        dict_efficient_tld['quality'] += total_quality_of_efficient_tld
-
-
-    ## 예시로 1개만 만들어 보기 위한 샘플 데이터 확보
-    pdf_efficient_tld_sample = efficient_tld[-1]
-    pdf_efficient_tld_sample['llm_name'] = [dict_llm_id2llm_name[llm_id] for llm_id in pdf_efficient_tld_sample['list_llm_id']]
-    pdf_merged_sample = pd.concat([df_to_find_efficient_tld, pd.DataFrame(pdf_efficient_tld_sample)], axis=1)
-    print("pdf+merge", pdf_merged_sample.head(2))
-
-    ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 위 샘플
-    pdf_merged_sample_llm_name_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='llm_name', aggfunc=lambda x: '\n'.join(x))
-    #pdf_merged_sample_llm_name_as_tld_table.to_csv('./processed-data/highest-quality-tldc-all.csv', encoding='utf-8-sig', index=True)
-    print(pdf_merged_sample_llm_name_as_tld_table.head(2))
-    print("pdf_merged_sample_llm_name_as_tld_tablepdf_merged_sample_llm_n")
-    
-    
-    ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 count이며, heatmap과 같은 색조를 넣기 위해서 사용됨
-    df_efficient_tld_num_llm_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='count', aggfunc=sum)
-    print(df_efficient_tld_num_llm_as_tld_table.head(2))
-    print("df_efficient_tld_num_llm_as_tld_tabledf_efficient_tld_num_llm_as_tld_tabledf_efficient_tld_num_llm_as_tld_table")
-
-    ChartView.plot_tld_table(df_efficient_tld_num_llm_as_tld_table, pdf_merged_sample_llm_name_as_tld_table, 'highest_quality')
-
-
-    return efficient_tld
+        ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 위 샘플
+        pdf_merged_sample_llm_name_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='llm_name', aggfunc=lambda x: '\n'.join(x))
+        #pdf_merged_sample_llm_name_as_tld_table.to_csv('./processed-data/highest-quality-tldc-all.csv', encoding='utf-8-sig', index=True)
+        #print(pdf_merged_sample_llm_name_as_tld_table.head(2))
+                
+        ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 count이며, heatmap과 같은 색조를 넣기 위해서 사용됨
+        df_efficient_tld_num_llm_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='count', aggfunc=sum)
+        #print(df_efficient_tld_num_llm_as_tld_table.head(2))
+        
+        return efficient_tld, pdf_merged_sample_llm_name_as_tld_table, df_efficient_tld_num_llm_as_tld_table,dict_llm_name2df
     
 class EDA:
     def __init__(self):
@@ -441,12 +425,6 @@ class ChartView:
     def __init__(self):
         pass
 
-    # def create_chart(self, df: pd.DataFrame):
-    #     return create_chart(df)
-
-    # def create_chart_distribution(self, df: pd.DataFrame, column_name: str):
-    #     return create_chart_distribution(df, column_name)
-
     @staticmethod
     def DataEDA(df: pd.DataFrame):
 
@@ -460,7 +438,7 @@ class ChartView:
         #model_name 컬럼이름 변경
         df.rename(columns={'model_name': 'answerer_llm_alias'}, inplace=True)
 
-        print(df.columns)
+        #print(df.columns)
 
         # 0-0. answerer_llm_alias 분포
         if 'answerer_llm_alias' in df.columns:
@@ -541,12 +519,12 @@ class ChartView:
         st.pyplot(fig)
 
         if 'answerer_llm_alias' in df.columns:
-            print(f"\nAnswerer LLM Alias 분포:")
-            print(df['answerer_llm_alias'].value_counts())
+            logger.info(f"\nAnswerer LLM Alias 분포:")
+            logger.info(df['answerer_llm_alias'].value_counts())
 
         if 'label_domain' in df.columns:
-            print(f"\nLabel Domain 분포:")
-            print(df['label_domain'].value_counts())
+            logger.info(f"\nLabel Domain 분포:")
+            logger.info(df['label_domain'].value_counts())
 
 
     @staticmethod
@@ -565,7 +543,7 @@ class ChartView:
 
         # 1. 서브플롯으로 각 모델별 히스토그램 분리
         unique_models = df_filtered["answerer_llm_alias"].unique()
-        print(df_filtered.describe())
+        #print(df_filtered.describe())
         print(f"{unique_models=}")
 
         #sys.exit()
@@ -697,6 +675,75 @@ class ChartView:
         plt.ylabel("Value")
         plt.xlabel("Statistic")
         plt.legend(title="Model", loc='lower right')
+        st.pyplot(plt)
+
+    def QualityCostGraph(efficient_tld: list, dict_llm_name2df: dict):
+        print("====================================== Quality Cost Graph =======================================")
+        st.title(f"Quality Cost Graph")
+
+        plt.figure(figsize=(12, 8))
+        previous_cost = 0
+        prefious_quaility = 0
+
+
+        plt.style.use("seaborn-v0_8-whitegrid")   # 밝은 그리드 스타일 적용
+        plt.rcParams['figure.figsize'] = (12, 8)
+        plt.rcParams['font.size'] = 11
+
+        # Efficient frontier 점들
+        for i in range(len(efficient_tld)):
+            x = efficient_tld[i]['cost']
+            y = efficient_tld[i]['quality']
+
+            if abs(x - previous_cost) < 0.01 and abs(y - previous_quality) < 0.5:
+                continue
+
+            plt.scatter(x, y, color='lightgray', s=40, alpha=0.6, marker="o")
+            previous_cost = x
+            previous_quality = y
+
+        # 색상 팔레트
+        colors = plt.cm.tab10(np.linspace(0, 1, len(dict_llm_name2df)))
+
+        for (llm_name, df_tld), color in zip(dict_llm_name2df.items(), colors):
+            x = df_tld['cost'].sum()
+            y = df_tld['quality'].sum()
+            
+            plt.scatter(x, y, color=color, s=80, edgecolor="black", linewidth=0.7, zorder=3)
+            plt.annotate(
+                f"{llm_name}\n({round(x, 3)}, {round(y, 1)})",
+                xy=(x, y),
+                xytext=(8, 6),
+                textcoords='offset points',
+                fontsize=12,
+                weight="bold",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", lw=0.5, alpha=0.7)
+            )
+
+        closest_quality_x = efficient_tld[-1]['cost']
+        closest_quality_y = efficient_tld[-1]['quality']
+        plt.scatter(closest_quality_x, closest_quality_y, color=color, marker="D", s=70, edgecolor="black")
+        plt.plot([x, closest_quality_x], [y, closest_quality_y], color=color, linestyle='--', alpha=0.7)
+        plt.annotate(
+            f"highest quality\n({round(closest_quality_x, 3)}, {round(closest_quality_y, 1)})",
+            xy=(closest_quality_x, closest_quality_y),
+            xytext=(8, -6),
+            textcoords='offset points',
+            fontsize=12,
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="gray", lw=0.5, alpha=0.7)
+        )
+
+        # 라벨, 제목
+        plt.xlabel('Cost', fontsize=12, weight="bold")
+        plt.ylabel('Quality', fontsize=12, weight="bold")
+        plt.title('Cost vs Quality', fontsize=14, weight="bold")
+
+        # 범례 자동 생성 (scatter에는 label 추가해야 함)
+        # plt.legend()
+
+        # 여백과 레이아웃 정리
+        plt.tight_layout()
+        #plt.show()
         st.pyplot(plt)
 
     def plot_tld_table(df_for_heatmap, df_for_anno, title, annot_fontsize=10):
@@ -847,6 +894,8 @@ class ChartView:
 
         print("df_for_heatmapdf_for_heatmapdf_for_heatmapdf_for_heatmap")
         
+        st.title(f"TLD Mapping Heatmap")
+
         TUPLE_FIGSIZE = (30,15)
         # 0은 흰색, 그 이후는 YlOrRd 그대로 쓰기
         orig_cmap = sns.color_palette("YlOrRd", as_cmap=True)
@@ -911,203 +960,19 @@ class ChartView:
         ax.set_xlabel("", fontsize=11, fontweight='bold')
         plt.title(title, pad=20, fontsize=20, fontweight='bold')
         plt.tight_layout()
-        plt.show()
+        #plt.show()
         st.pyplot(plt)
 
 
 
     @staticmethod
-    def TLDCMappingHeatmap(df_filtered: pd.DataFrame):
+    def TLDCMappingHeatmap(efficient_tld: list, pdf_merged_sample_llm_name_as_tld_table: pd.DataFrame, df_efficient_tld_num_llm_as_tld_table: pd.DataFrame):
 
         print("====================================== TLD Mapping Heatmap =======================================")
-  
-        dict_llm_name2df_records = {}
-
-        for answerer_llm_alias in df_filtered['answerer_llm_alias'].unique().tolist():
-            dict_llm_name2df_records[answerer_llm_alias] = df_filtered[df_filtered['answerer_llm_alias'] == answerer_llm_alias]
-            dict_llm_name2df_records[answerer_llm_alias].reset_index(drop=True, inplace=True)
-
-        list_task_label = [f"T{i}" for i in range(1, 13)]
-        list_domain_label = [f"D{i}" for i in range(1, 11)]
-        list_level_label = [f"L{i}" for i in range(1, 4)]
-        list_llm_name = list(dict_llm_name2df_records.keys())
-
-        dict_llm_name2df = {}    
-
-        for llm_name, df in dict_llm_name2df_records.items():
-            # print(f"{df.head(20)=}")
-            list_labels = []
-            for t in list_task_label:
-                for d in list_domain_label:
-                    for l in list_level_label:
-                        list_labels.append({
-                            "T": t,
-                            "D": d,
-                            "L": l,
-                        })
-            df_tld = pd.DataFrame(list_labels)
-            df_tld['count'] = 0.0
-            df_tld['quality'] = 0.0
-            df_tld['cost'] = 0.0
-
-            #df_tld.set_index(['T', 'D', 'L'], inplace=True)
-
-            # print("22222 : ", llm_name)
-            
-            # print(len(df))
-
-            for index, row in tqdm(df.iterrows()):
-                
-                T = row['label_task']
-                D = row['label_domain']
-                L = row['label_level']
-                cost = row['cost']
-                quality = row['quality']
-                
-                normalization_factor = 1 / (len(T) * len(D) * len(L))                
-                # for t, d, l in itertools.product(T, D, L):
-                #     key = (t, d, l)
-                #     if key in df_tld.index:
-                #         df_tld.loc[key, 'count'] += normalization_factor
-                #         df_tld.loc[key, 'cost'] += cost * normalization_factor
-                #         df_tld.loc[key, 'quality'] += quality * normalization_factor
-                    #print(f"{key}")
-                    #print(f'{df_tld.index=}')
-
-                for t_to_count, d_to_count, l_to_count in itertools.product(T, D, L):
-                    mask = (
-                        (df_tld['T'] == t_to_count) &
-                        (df_tld['D'] == d_to_count) &
-                        (df_tld['L'] == l_to_count)
-                    )
-                    df_tld.loc[mask, 'count'] += normalization_factor
-                    df_tld.loc[mask, 'cost'] += cost * normalization_factor
-                    df_tld.loc[mask, 'quality'] += quality * normalization_factor
-            
-            dict_llm_name2df[llm_name] = df_tld
-            print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
-
-            # print("33333 : ", llm_name)
-            # print(f"{df_tld.head(20)=}")
-
-            #print(f'{llm_name}: {len(dict_llm_name2df[llm_name])}')
-
-        
-        #ßdict_llm_name2df['gpt-4.1'].head(2)
-        # dict_llm_name2df는 딕셔너리이므로 각 모델별 DataFrame을 개별적으로 저장
-        print(f"dict_llm_name2df contains {len(dict_llm_name2df)} models")
-        
-        # 각 모델별 DataFrame을 개별 CSV 파일로 저장 (선택사항)
-        # for model_name, df_model in dict_llm_name2df.items():
-        #     filename = f'dict_llm_name2df_{model_name.replace("-", "_")}.csv'
-        #     df_model.to_csv(filename, index=False)
-        #     print(f"Saved {filename}")
-
-        # 모든 DataFrame을 하나로 합쳐서 저장
-        all_data = []
-        for model_name, df_model in dict_llm_name2df.items():
-            df_with_model = df_model.copy()
-            df_with_model['model_name'] = model_name
-            all_data.append(df_with_model)
-            
-        combined_df = pd.concat(all_data, ignore_index=True)
-        combined_df.to_csv('all_models_data.csv', index=False)
-
-
-        dict_llm_id2llm_name = {
-        index: llm_name for index, llm_name in enumerate(dict_llm_name2df.keys())
-        }
-        print(f"{dict_llm_id2llm_name[0]=}")
-        dict_llm_id2df = {index: df for index, df in enumerate(dict_llm_name2df.values())}
-        dict_llm_id2df[0].head(2)
-
-        ## count가 0이 아닌 것만 모음
-
-        def get_row_from_df_tld(df_tld, T, D, L):
-            return df_tld[(df_tld['T'] == T) & (df_tld['D'] == D) & (df_tld['L'] == L)]
-
-        df_all_candidate_tld = pd.DataFrame(columns=['T', 'D', 'L', 'list_dict_list_llm_ids_and_quality_and_cost_efficient', 'count'])
-
-        df_sample_tld = dict_llm_id2df[0]
-
-        for index, current_target_row in tqdm(df_sample_tld[df_sample_tld['count'].ne(0)].iterrows()):
-            T = current_target_row['T']
-            D = current_target_row['D']
-            L = current_target_row['L']
-            count = current_target_row['count']
-
-            list_dict_list_llm_id_and_quality_and_cost = []
-
-            for candidate_llm_id, df_tld_to_check in dict_llm_id2df.items():
-                row_to_check = get_row_from_df_tld(df_tld_to_check, T, D, L)
-                candidate_quality = row_to_check['quality'].values[0]
-                candidate_cost = row_to_check['cost'].values[0]
-                list_dict_list_llm_id_and_quality_and_cost.append({'list_llm_id': [candidate_llm_id], 'quality': candidate_quality, 'cost': candidate_cost})
-
-            list_dict_list_llm_id_and_quality_and_cost_efficient = filter_efficient_llm(list_dict_list_llm_id_and_quality_and_cost)
-            # print(T,D,L)
-            # print(list_dict_list_llm_id_and_quality_and_cost_efficient)
-            if len(list_dict_list_llm_id_and_quality_and_cost_efficient) == 0:
-                print(T,D,L)
-                print(list_dict_list_llm_id_and_quality_and_cost_efficient)
-                break
-            df_all_candidate_tld.loc[len(df_all_candidate_tld)] = [T, D, L, list_dict_list_llm_id_and_quality_and_cost_efficient, count]
-        df_all_candidate_tld.head(2)
-
-        ## count가 0개가 아닌것만 처음에 모였고,
-        ## TLD 조합 내 최적 LLM이 1개인 것들을 별도로 모음
-        df_already_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) == 1].reset_index(drop=True)
-        print("df_already_efficient_tld.shape : ", df_already_efficient_tld.shape)
-    
-
-        ## TLD 조합 내 최적 LLM이 1개인 것들의 quality, cost를 누적 (어떠한 조합에서도 누적된 quality, cost는 기본이됨)
-        total_quality_of_efficient_tld = 0
-        total_cost_of_efficient_tld = 0
-        for _, df_already_efficient_tld_row in df_already_efficient_tld.iterrows():
-            total_quality_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['quality']
-            total_cost_of_efficient_tld += df_already_efficient_tld_row['list_dict_list_llm_ids_and_quality_and_cost_efficient'][0]['cost']
-        
-        ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 추림
-        ## 이것들을 가지고 최적 LLM을 찾아야 함
-        df_to_find_efficient_tld = df_all_candidate_tld[df_all_candidate_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].map(len) >= 2].reset_index(drop=True)
-        print("df_to_find_efficient_tld.shape : ", df_to_find_efficient_tld.shape)
-
-        df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list()
-
-        ## TLD 조합 내 최적 LLM이 2개 이상인 것들을 입력해서
-        ## 최적을 찾음
-        efficient_tld = get_efficient_tld_by_step_by_step(df_to_find_efficient_tld['list_dict_list_llm_ids_and_quality_and_cost_efficient'].to_list())
-
-        ## 2개 이상이었던 efficient_tld에 1개짜리 값 추가
-        for dict_efficient_tld in efficient_tld:
-            dict_efficient_tld['cost'] += total_cost_of_efficient_tld
-            dict_efficient_tld['quality'] += total_quality_of_efficient_tld
-
-
-        ## 예시로 1개만 만들어 보기 위한 샘플 데이터 확보
-        pdf_efficient_tld_sample = efficient_tld[-1]
-        pdf_efficient_tld_sample['llm_name'] = [dict_llm_id2llm_name[llm_id] for llm_id in pdf_efficient_tld_sample['list_llm_id']]
-        pdf_merged_sample = pd.concat([df_to_find_efficient_tld, pd.DataFrame(pdf_efficient_tld_sample)], axis=1)
-        print("pdf+merge", pdf_merged_sample.head(2))
-
-        ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 위 샘플
-        pdf_merged_sample_llm_name_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='llm_name', aggfunc=lambda x: '\n'.join(x))
-        #pdf_merged_sample_llm_name_as_tld_table.to_csv('./processed-data/highest-quality-tldc-all.csv', encoding='utf-8-sig', index=True)
-        print(pdf_merged_sample_llm_name_as_tld_table.head(2))
-        print("pdf_merged_sample_llm_name_as_tld_tablepdf_merged_sample_llm_n")
-        
-        
-        ## TLD Table 만들기 위해 pivot table 만듬. 이 때의 값은 count이며, heatmap과 같은 색조를 넣기 위해서 사용됨
-        df_efficient_tld_num_llm_as_tld_table = pivot_df_as_tld2tld_as_table(pdf_merged_sample, values='count', aggfunc=sum)
-        print(df_efficient_tld_num_llm_as_tld_table.head(2))
-        print("df_efficient_tld_num_llm_as_tld_tabledf_efficient_tld_num_llm_as_tld_tabledf_efficient_tld_num_llm_as_tld_table")
-
         ChartView.plot_tld_table(df_efficient_tld_num_llm_as_tld_table, pdf_merged_sample_llm_name_as_tld_table, 'highest_quality')
 
 
-    
 
-    
     
     def ModelHeatmap(df_filtered: pd.DataFrame):
         st.title(f"모델별 히트맵")
