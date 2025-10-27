@@ -80,7 +80,6 @@ def main():
 
     #평가대상 데이터 분포 확인
     ChartView.DataEDA(df)
-    #print(df.columns)
     
     #평가결과 데이터 클렌징    
     df_filtered = dataset_clean(df)
@@ -95,15 +94,13 @@ def main():
     ChartView.ModelCostDist(df_filtered)
 
     #tldc 맵핑 데이터 만들기
-    efficient_tld = EDA.TLDMapData(df_filtered)
- 
+    efficient_tld, pdf_merged_sample_llm_name_as_tld_table, df_efficient_tld_num_llm_as_tld_table, dict_llm_name2df = EDA.TLDMapData(df_filtered)
 
     #tldc 맵핑 히트맵 그리기
-    #ChartView.TLDCMappingHeatmap(df_filtered)
-   
- 
-    #모델별 히트맵 그리기
-    #ChartView.ModelHeatmap(df_filtered)
+    ChartView.TLDCMappingHeatmap(efficient_tld, pdf_merged_sample_llm_name_as_tld_table, df_efficient_tld_num_llm_as_tld_table)
+
+        #tldc 맵핑 히트맵 그리기
+    ChartView.QualityCostGraph(efficient_tld, dict_llm_name2df)
 
 
 if __name__ == "__main__":
